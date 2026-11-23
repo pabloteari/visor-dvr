@@ -1,0 +1,45 @@
+# Gera os instaladores de Windows, macOS e Linux.
+# Roda ao publicar uma tag (ex.: v1.0.0) ou manualmente em Actions > Build > Run workflow.
+# Os arquivos ficam em Actions > (execução) > Artifacts.
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: --linux
+          - os: windows-latest
+            target: --win
+          - os: macos-latest      # Apple Silicon (arm64)
+            target: --mac --arm64
+          - os: macos-13          # Intel (x64)
+            target: --mac --x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # O ffmpeg-static baixa o binário do sistema e da arquitetura de cada máquina.
+      - run: npm ci
+      - run: npx electron-builder ${{ matrix.target }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false   # sem certificado de assinatura
+      - uses: actions/upload-artifact@v4
+        with:
+          name: visor-dvr-${{ matrix.os }}
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.exe
+            dist/*.dmg
+          if-no-files-found: error

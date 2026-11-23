@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob: http://127.0.0.1:*; connect-src http://127.0.0.1:*; worker-src blob:">
+  <title>Visor DVR</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="mode" id="mode">AO VIVO</div>
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="controls">
+      <button data-step="-600" title="Voltar 10 minutos">−10m</button>
+      <button data-step="-60" title="Voltar 1 minuto">−1m</button>
+      <button data-step="-10" title="Voltar 10 segundos">−10s</button>
+      <button id="playPause" class="primary" title="Pausar / continuar (espaço)">⏸</button>
+      <button data-step="10" title="Avançar 10 segundos">+10s</button>
+      <button data-step="60" title="Avançar 1 minuto">+1m</button>
+      <button data-step="600" title="Avançar 10 minutos">+10m</button>
+      <select id="speed" title="Velocidade da reprodução">
+        <option value="1">1×</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+        <option value="8">8×</option>
+        <option value="16">16×</option>
+      </select>
+      <button id="prevEvent" title="Movimento anterior ([)">⟸ mov.</button>
+      <button id="nextEvent" title="Próximo movimento (])">mov. ⟹</button>
+      <button id="goLive" class="live" title="Voltar para o ao vivo">● Ao vivo</button>
+      <select id="liveQuality" title="Qualidade da grade ao vivo">
+        <option value="alta">Ao vivo: alta</option>
+        <option value="leve">Ao vivo: leve</option>
+      </select>
+    </div>
+    <div class="jump">
+      <input class="dt" id="jumpTo" placeholder="dd/mm/aaaa hh:mm:ss" title="Ir para data e hora. Também aceita só hh:mm:ss (usa o dia exibido)">
+      <button id="jumpBtn">Ir</button>
+    </div>
+    <button id="camsBtn" class="icon" title="Escolher câmeras da grade">▦</button>
+    <button id="settingsBtn" class="icon" title="Configurações">⚙</button>
+  </header>
+
+  <main id="grid" class="grid"></main>
+
+  <section class="timeline-wrap">
+    <div class="timeline-head">
+      <button id="dayPrev" title="Dia anterior">◀</button>
+      <input class="dt day" id="day" placeholder="dd/mm/aaaa" title="Dia exibido na linha do tempo (Enter para abrir)">
+      <button id="dayNext" title="Próximo dia">▶</button>
+      <span class="hint">Clique para ir ao horário · arraste para selecionar um recorte · roda do mouse para zoom · <span class="mot-key"></span> movimento</span>
+      <span class="spacer"></span>
+      <span class="hd" id="hdInfo"></span>
+      <button id="zoomOut" title="Afastar">−</button>
+      <button id="zoomIn" title="Aproximar">+</button>
+      <button id="zoomDay" title="Mostrar o dia inteiro">Dia inteiro</button>
+    </div>
+    <div class="timeline" id="timelineBox">
+      <canvas id="timeline"></canvas>
+      <div class="tip" id="tip"><img id="tipImg" alt=""><span id="tipText"></span></div>
+    </div>
+  </section>
+
+  <section class="cut">
+    <div class="field">
+      <label>Início</label>
+      <input class="dt" id="cutStart" placeholder="dd/mm/aaaa hh:mm:ss">
+      <button id="cutStartNow" title="Usar a posição atual">⤓ atual</button>
+    </div>
+    <div class="field">
+      <label>Fim</label>
+      <input class="dt" id="cutEnd" placeholder="dd/mm/aaaa hh:mm:ss">
+      <button id="cutEndNow" title="Usar a posição atual">⤓ atual</button>
+    </div>
+    <div class="field" id="cutLen"></div>
+    <div class="field cams" id="cutCams"></div>
+    <div class="field">
+      <label title="Um MP4 para cada câmera marcada"><input type="checkbox" id="cutSeparate" checked> arquivos separados</label>
+      <label title="Um vídeo só com as câmeras marcadas lado a lado (H.264)"><input type="checkbox" id="cutGrid"> vídeo em grade</label>
+      <select id="cutFormat" title="Formato dos arquivos separados">
+        <option value="original">MP4 original (H.265, rápido, sem perda)</option>
+        <option value="compativel">MP4 compatível (H.264, toca em qualquer lugar)</option>
+      </select>
+    </div>
+    <div class="field">
+      <button id="cutDir" class="link" title="Alterar pasta"></button>
+      <button id="cutGo" class="primary">✂ Salvar recorte</button>
+    </div>
+    <ul class="jobs" id="jobs"></ul>
+  </section>
+
+  <dialog id="settings">
+    <form method="dialog" id="settingsForm">
+      <h2>Conexão com o DVR</h2>
+      <label>Endereço (IP)<input id="cfgHost" required placeholder="192.168.0.10"></label>
+      <label>Usuário<input id="cfgUser" required value="admin"></label>
+      <label>Senha<input id="cfgPass" type="password" autocomplete="off"></label>
+      <p class="msg" id="cfgMsg"></p>
+      <div class="actions">
+        <button type="button" id="cfgCancel">Cancelar</button>
+        <button type="button" id="cfgSave" class="primary">Testar e salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="camsDlg">
+    <form method="dialog">
+      <h2>Câmeras na grade</h2>
+      <p class="msg">Marque as que aparecem. Para mudar a ordem, arraste as câmeras na grade.</p>
+      <div id="camsList" class="cams-list"></div>
+      <div class="actions">
+        <button type="button" id="camsReset">Padrão</button>
+        <button type="button" id="camsClose" class="primary">Fechar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="../../node_modules/mpegts.js/dist/mpegts.js"></script>
+  <script src="timeline.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
