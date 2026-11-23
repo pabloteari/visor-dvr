@@ -182,7 +182,20 @@ function registerIpc() {
   });
 }
 
+// Uma janela só: abrir de novo (ícone, início do sistema) traz a que já está aberta.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+}
+
 app.whenReady().then(async () => {
+  if (!app.hasSingleInstanceLock()) return;
   cfg = config.load();
   streams = new StreamServer(getClient);
   await streams.listen();

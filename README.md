@@ -37,8 +37,10 @@ com movimento ficam marcados, e só a partir do momento da mudança.
 Pegue o instalador do seu sistema (ver "Gerar os instaladores"). Na primeira abertura, informe o IP, o usuário
 e a senha do DVR (⚙). A senha fica cifrada no cofre do sistema (Keychain, DPAPI ou keyring).
 
-- **Linux (Ubuntu)**: prefira o `.deb` (`sudo apt install ./visor-dvr_1.0.0_amd64.deb`). O AppImage pode não abrir no
-  Ubuntu 24.04 por causa da restrição do AppArmor ao sandbox do Chromium.
+- **Linux (Ubuntu)**: `.deb` (`sudo apt install ./visor-dvr_1.0.0_amd64.deb`), ou sem sudo, só para o seu usuário:
+  `npx electron-builder --linux dir && bash scripts/install-linux-user.sh`. O script põe no menu, fixa na dock e
+  liga a abertura ao entrar na sessão (`--uninstall` desfaz). O AppImage pode não abrir no Ubuntu 24.04 por causa da
+  restrição do AppArmor ao sandbox do Chromium.
 - **Windows**: `Visor DVR Setup 1.0.0.exe`. Sem certificado pago, o SmartScreen avisa: "Mais informações → Executar assim mesmo".
 - **macOS**: `.dmg`. Sem assinatura da Apple, a primeira abertura é bloqueada: Ajustes do Sistema → Privacidade e
   Segurança → "Abrir mesmo assim".
