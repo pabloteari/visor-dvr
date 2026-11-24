@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('dvr', {
   chooseDir: () => ipcRenderer.invoke('export:chooseDir'),
   exportClip: (o) => ipcRenderer.invoke('export:run', o),
   showFile: (f) => ipcRenderer.invoke('shell:show', f),
+  onVisibility: (fn) => ipcRenderer.on('app:visibility', (_e, visible) => fn(visible)),
+  onGoLive: (fn) => ipcRenderer.on('app:live', () => fn()),
   onExportProgress: (fn) => {
     const h = (_e, p) => fn(p);
     ipcRenderer.on('export:progress', h);

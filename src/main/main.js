@@ -1,6 +1,6 @@
 'use strict';
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, Notification } = require('electron');
 const { DahuaClient } = require('./dahua');
 const { StreamServer, SPEEDS } = require('./streams');
 const { exportClips, snapshot, thumbnail } = require('./exporter');
@@ -14,6 +14,8 @@ let cfg;
 let client = null;
 let streams;
 let win;
+let tray = null;
+let quitting = false;
 
 const getClient = () => {
   if (!client) {
@@ -52,16 +54,54 @@ function createWindow() {
   });
   if (b.maximized) win.maximize();
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-  // Lembra tamanho e posição da janela.
-  win.on('close', () => {
+  win.on('close', (e) => {
+    // Lembra tamanho e posição da janela.
     try {
       cfg.bounds = { ...win.getNormalBounds(), maximized: win.isMaximized() };
       config.save(cfg);
     } catch { /* sem permissão para salvar: ignora */ }
+    // Com o ícone na barra, fechar só esconde (e desconecta as câmeras). "Sair" fecha de verdade.
+    if (tray && !quitting) {
+      e.preventDefault();
+      win.hide();
+      win.webContents.send('app:visibility', false);
+      if (!cfg.trayHintShown && Notification.isSupported()) {
+        new Notification({ title: 'Visor DVR', body: 'Continua no ícone da barra do topo. Para fechar de vez, use "Sair" nesse ícone.' }).show();
+        cfg.trayHintShown = true;
+        try { config.save(cfg); } catch { /* ignora */ }
+      }
+    }
   });
   // Links externos nunca abrem dentro do app.
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e) => e.preventDefault());
+}
+
+function showWindow() {
+  if (!win || win.isDestroyed()) { createWindow(); return; }
+  const wasHidden = !win.isVisible();
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  if (wasHidden) win.webContents.send('app:visibility', true);
+}
+
+function createTray() {
+  try {
+    tray = new Tray(nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'tray.png')));
+  } catch (e) {
+    console.error('[barra] sem ícone na barra:', e.message);
+    tray = null;
+    return;
+  }
+  tray.setToolTip('Visor DVR');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Abrir Visor DVR', click: showWindow },
+    { label: 'Ao vivo', click: () => { showWindow(); win?.webContents.send('app:live'); } },
+    { type: 'separator' },
+    { label: 'Sair', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on('click', showWindow);
 }
 
 function registerIpc() {
@@ -186,12 +226,8 @@ function registerIpc() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (!win) return;
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-  });
+  app.on('second-instance', () => { if (win) showWindow(); });
+  app.on('before-quit', () => { quitting = true; });
 }
 
 app.whenReady().then(async () => {
@@ -201,7 +237,8 @@ app.whenReady().then(async () => {
   await streams.listen();
   registerIpc();
   createWindow();
-  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+  createTray();
+  app.on('activate', showWindow);
 });
 
 app.on('window-all-closed', () => {

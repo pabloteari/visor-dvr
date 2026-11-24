@@ -830,6 +830,19 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape' && S.single) toggleSingle(S.single);
 });
 
+// Janela escondida no ícone da barra: desconecta as câmeras (não gasta CPU nem rede)
+// e volta como estava ao reabrir.
+let resumeOnShow = null;
+api.onVisibility((visible) => {
+  if (!visible) {
+    resumeOnShow = S.paused ? null : S.mode;
+    if (!S.paused) togglePause();
+  } else if (resumeOnShow === 'live') goLive();
+  else if (resumeOnShow === 'playback' && S.paused) togglePause();
+  if (visible) resumeOnShow = null;
+});
+api.onGoLive(() => goLive());
+
 // Ganchos para o teste automatizado (scripts/smoke.js).
 window.__visor = {
   S, seek, goLive, togglePause, toggleSingle, setCut, runCut, position, fmt, parseBr,

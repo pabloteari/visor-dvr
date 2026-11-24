@@ -15,7 +15,7 @@ function load() {
   if (raw.passEnc && safeStorage.isEncryptionAvailable()) {
     try { pass = safeStorage.decryptString(Buffer.from(raw.passEnc, 'base64')); } catch { pass = ''; }
   }
-  const cfg = { host: raw.host || '', user: raw.user || 'admin', pass, outDir: raw.outDir || '', bounds: raw.bounds || null };
+  const cfg = { host: raw.host || '', user: raw.user || 'admin', pass, outDir: raw.outDir || '', bounds: raw.bounds || null, trayHintShown: Boolean(raw.trayHintShown) };
   // Para desenvolvimento: variáveis de ambiente preenchem o que estiver vazio.
   if (!cfg.host && process.env.DVR_HOST) cfg.host = process.env.DVR_HOST;
   if (!raw.user && process.env.DVR_USER) cfg.user = process.env.DVR_USER;
@@ -24,7 +24,7 @@ function load() {
 }
 
 function save(cfg) {
-  const out = { host: cfg.host, user: cfg.user, outDir: cfg.outDir || '', bounds: cfg.bounds || null };
+  const out = { host: cfg.host, user: cfg.user, outDir: cfg.outDir || '', bounds: cfg.bounds || null, trayHintShown: Boolean(cfg.trayHintShown) };
   if (cfg.pass) {
     if (!safeStorage.isEncryptionAvailable()) throw new Error('O sistema não oferece armazenamento seguro para a senha.');
     out.passEnc = safeStorage.encryptString(cfg.pass).toString('base64');

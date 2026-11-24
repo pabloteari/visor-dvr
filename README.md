@@ -20,6 +20,8 @@ Funciona em Windows, macOS e Linux, sem plugin e sem Internet Explorer.
   - *vídeo em grade*: um MP4 só (H.264, 1920×1080) com as câmeras lado a lado.
 - **Câmeras da grade** (▦): escolha quais aparecem. Para mudar a ordem, arraste pelo nome da câmera.
 - **HD**: mostra o tamanho do disco e quantos dias de gravação ele guarda. Com o HD cheio, o DVR apaga o mais antigo.
+- **Ícone na barra do topo** (Linux com AppIndicator, Windows e Mac): fechar a janela só esconde o app e desconecta as
+  câmeras (sem gastar CPU nem rede). Clique no ícone para voltar. "Sair" no menu do ícone fecha de vez.
 - O app **lembra** a janela, a qualidade, a velocidade, a ordem das câmeras, a pasta e o último recorte.
 
 Atalhos: `espaço` pausa, `←`/`→` ±10 s, `Shift+←`/`→` ±1 min, `[`/`]` movimento anterior/próximo.
