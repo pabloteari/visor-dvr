@@ -39,6 +39,15 @@ if [ -d "$APP_DIR" ]; then mv "$APP_DIR" "$APP_DIR.old"; fi
 mv "$APP_DIR.new" "$APP_DIR"
 [ -d "$APP_DIR.old" ] && rm -r "$APP_DIR.old"
 
+# Ubuntu 23.10+ (AppArmor) bloqueia o sandbox do Chromium para programas sem perfil próprio, e o app
+# fecha ao abrir pelo menu ou no login. Sem perfil, abre com --no-sandbox. Para manter o sandbox,
+# crie o perfil (precisa de sudo; ver README) e rode este script de novo.
+FLAGS=""
+if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ] && ! grep -qsF "$APP_DIR/visor-dvr" /etc/apparmor.d/*; then
+  FLAGS=" --no-sandbox"
+  echo "Aviso: AppArmor restringe o sandbox e não há perfil para o app; usando --no-sandbox."
+fi
+
 mkdir -p "$(dirname "$ICON")" "$(dirname "$DESKTOP")" "$(dirname "$AUTOSTART")"
 cp build/icon.png "$ICON"
 
@@ -47,7 +56,7 @@ cat > "$DESKTOP" <<EOF
 Type=Application
 Name=Visor DVR
 Comment=Câmeras do DVR: ao vivo, gravações e recortes
-Exec="$APP_DIR/visor-dvr" %U
+Exec="$APP_DIR/visor-dvr"$FLAGS %U
 Icon=visor-dvr
 Terminal=false
 Categories=Video;AudioVideo;
@@ -59,7 +68,7 @@ cat > "$AUTOSTART" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Visor DVR
-Exec="$APP_DIR/visor-dvr"
+Exec="$APP_DIR/visor-dvr"$FLAGS
 Icon=visor-dvr
 Terminal=false
 X-GNOME-Autostart-enabled=true

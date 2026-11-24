@@ -41,7 +41,14 @@ e a senha do DVR (⚙). A senha fica cifrada no cofre do sistema (Keychain, DPAP
 
 - **Linux (Ubuntu)**: `.deb` (`sudo apt install ./visor-dvr_1.0.0_amd64.deb`), ou sem sudo, só para o seu usuário:
   `npx electron-builder --linux dir && bash scripts/install-linux-user.sh`. O script põe no menu, fixa na dock e
-  liga a abertura ao entrar na sessão (`--uninstall` desfaz). O AppImage pode não abrir no Ubuntu 24.04 por causa da
+  liga a abertura ao entrar na sessão (`--uninstall` desfaz).
+  No Ubuntu 23.10+ o AppArmor bloqueia o sandbox do Chromium para apps sem perfil, e o app fecha ao abrir. Sem perfil,
+  o script usa `--no-sandbox`. Para manter o sandbox, crie o perfil e reinstale:
+  ```sh
+  printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile visor-dvr "%s" flags=(unconfined) {\n  userns,\n}\n' \
+    "$HOME/.local/opt/visor-dvr/visor-dvr" | sudo tee /etc/apparmor.d/visor-dvr
+  sudo apparmor_parser -r /etc/apparmor.d/visor-dvr && bash scripts/install-linux-user.sh
+  ``` O AppImage pode não abrir no Ubuntu 24.04 por causa da
   restrição do AppArmor ao sandbox do Chromium.
 - **Windows**: `Visor DVR Setup 1.0.0.exe`. Sem certificado pago, o SmartScreen avisa: "Mais informações → Executar assim mesmo".
 - **macOS**: `.dmg`. Sem assinatura da Apple, a primeira abertura é bloqueada: Ajustes do Sistema → Privacidade e
