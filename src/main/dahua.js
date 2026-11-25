@@ -44,16 +44,15 @@ class DahuaClient {
     this.port = port;
     this.user = user;
     this.pass = pass;
-    this.challenge = null;
-    this.nc = 0;
   }
 
-  authHeader(method, uri) {
-    const c = this.challenge;
-    if (!c) return undefined;
+  // Neste DVR cada "nonce" do Digest vale para UMA requisição só (testado: reusar dá 401,
+  // e pedir um novo não invalida os anteriores). Por isso cada requisição pega o seu desafio,
+  // e várias em paralelo não interferem umas nas outras.
+  authHeader(method, uri, c) {
     const ha1 = md5(`${this.user}:${c.realm}:${this.pass}`);
     const ha2 = md5(`${method}:${uri}`);
-    const nc = (++this.nc).toString(16).padStart(8, '0');
+    const nc = '00000001';
     const cnonce = crypto.randomBytes(8).toString('hex');
     const qop = c.qop ? c.qop.split(',')[0].trim() : null;
     const response = qop
@@ -62,55 +61,33 @@ class DahuaClient {
     let h = `Digest username="${this.user}", realm="${c.realm}", nonce="${c.nonce}", uri="${uri}", ` +
       `response="${response}", algorithm=MD5`;
     if (qop) h += `, qop=${qop}, nc=${nc}, cnonce="${cnonce}"`;
-    if (c.opaque) h += `, opaque="${c.opaque}"`;
+    if (c.opaque !== undefined) h += `, opaque="${c.opaque}"`;
     return h;
   }
 
-  // Faz um GET e devolve a resposta (stream). Repete uma única vez em caso de 401,
-  // para não acionar o bloqueio de conta do DVR com tentativas seguidas.
-  rawGet(uri, { timeout = 15000 } = {}) {
-    const once = () => new Promise((resolve, reject) => {
-      const headers = {};
-      const auth = this.authHeader('GET', uri);
-      if (auth) headers.Authorization = auth;
+  send(uri, timeout, auth) {
+    return new Promise((resolve, reject) => {
+      const headers = auth ? { Authorization: auth } : {};
       const req = http.get({ host: this.host, port: this.port, path: uri, headers, timeout }, resolve);
       req.on('timeout', () => req.destroy(new Error('tempo esgotado falando com o DVR')));
       req.on('error', reject);
     });
-    // Atualiza o desafio Digest só se ele mudou. Com várias requisições em paralelo, zerar o
-    // contador (nc) a cada 401 faria duas delas repetirem o mesmo nc, e o DVR recusa como replay.
-    const adopt = (res) => {
-      const www = res.headers['www-authenticate'] || '';
-      if (!/^Digest/i.test(www)) throw new Error('DVR pediu autenticação não suportada');
-      const ch = parseChallenge(www);
-      if (ch.nonce !== this.challenge?.nonce) {
-        this.challenge = ch;
-        this.nc = 0;
-      }
-      return /stale=(true|"true")/i.test(www);
-    };
-    return once().then((res) => {
-      if (res.statusCode !== 401) return res;
+  }
+
+  // Faz um GET autenticado e devolve a resposta (stream). Uma tentativa só com a senha:
+  // se o DVR recusar, é usuário/senha errados (insistir poderia bloquear a conta no DVR).
+  async rawGet(uri, { timeout = 15000 } = {}) {
+    const first = await this.send(uri, timeout, null);
+    if (first.statusCode !== 401) return first;
+    first.resume();
+    const www = first.headers['www-authenticate'] || '';
+    if (!/^Digest/i.test(www)) throw new Error('DVR pediu autenticação não suportada');
+    const res = await this.send(uri, timeout, this.authHeader('GET', uri, parseChallenge(www)));
+    if (res.statusCode === 401) {
       res.resume();
-      adopt(res);
-      return once().then((res2) => {
-        if (res2.statusCode !== 401) return res2;
-        res2.resume();
-        // Nonce vencido (stale) ou trocado por outra requisição paralela: uma última tentativa.
-        const stale = adopt(res2);
-        const before = this.challenge.nonce;
-        if (!stale && before === parseChallenge(res2.headers['www-authenticate'] || '').nonce && this.nc <= 1) {
-          throw new Error('Usuário ou senha incorretos');
-        }
-        return once().then((res3) => {
-          if (res3.statusCode === 401) {
-            res3.resume();
-            throw new Error('Usuário ou senha incorretos');
-          }
-          return res3;
-        });
-      });
-    });
+      throw new Error('Usuário ou senha incorretos');
+    }
+    return res;
   }
 
   async getText(uri) {
@@ -182,6 +159,15 @@ class DahuaClient {
     }
     out.sort((a, b) => a.start - b.start);
     return out;
+  }
+
+  // Foto instantânea do ao vivo (JPEG pequeno, chega em ~0,2 s). Usada enquanto o vídeo conecta.
+  async snapshotJpeg(channel) {
+    const res = await this.rawGet(`/cgi-bin/snapshot.cgi?channel=${channel}`, { timeout: 8000 });
+    const chunks = [];
+    for await (const c of res) chunks.push(c);
+    if (res.statusCode !== 200) throw new Error(`DVR respondeu ${res.statusCode} à foto`);
+    return Buffer.concat(chunks);
   }
 
   // Início da gravação mais antiga do canal (o HD apaga o mais velho quando enche).

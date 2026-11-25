@@ -110,11 +110,11 @@ function saveLayout() {
   pref.set('gridLayout', { order, hidden: all.filter((ch) => !S.shown.includes(ch)) });
 }
 
-function applyShown(shown) {
+function applyShown(shown, save = true) {
   const at = position();
   S.shown = shown;
   if (S.single && !shown.includes(S.single)) S.single = null;
-  saveLayout();
+  if (save) saveLayout();
   stopAll();
   buildGrid();
   drawRows();
@@ -230,13 +230,42 @@ function stopTile(t) {
 
 function stopAll() { for (const t of S.tiles.values()) stopTile(t); }
 
+// Guarda o quadro que está na tela como "poster" do vídeo, para não ficar preto enquanto a
+// próxima conexão abre. Reduz para 640 px de largura (rápido e leve).
+function keepFrame(t) {
+  const v = t.video;
+  if (!t.player || !v.videoWidth || v.readyState < 2) return;
+  try {
+    const w = Math.min(640, v.videoWidth);
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = Math.round((v.videoHeight / v.videoWidth) * w);
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    v.poster = c.toDataURL('image/jpeg', 0.8);
+  } catch { /* sem quadro disponível */ }
+}
+
+function setLoading(t, on, text = '') {
+  t.el.classList.toggle('loading', on);
+  t.state.textContent = on ? text : '';
+}
+
+// Sem quadro guardado: busca uma imagem rápida para preencher (foto do ao vivo ou miniatura da gravação).
+async function placeholder(ch, t, gen, start) {
+  try {
+    const src = S.mode === 'live' ? await api.liveFrame({ channel: ch }) : await api.thumb({ channel: ch, t: start });
+    if (src && gen === t.gen && t.el.classList.contains('loading') && !t.video.poster) t.video.poster = src;
+  } catch { /* fica o fundo animado */ }
+}
+
 async function startTile(ch, start) {
   const t = S.tiles.get(ch);
   if (!t) return;
+  keepFrame(t);
   stopTile(t);
   const gen = t.gen;
-  t.state.textContent = 'Conectando…';
-  t.video.removeAttribute('poster');
+  setLoading(t, true, S.mode === 'live' ? 'Conectando…' : `Carregando ${fmtBr(start).slice(11)}…`);
+  if (!t.video.poster) placeholder(ch, t, gen, start);
   t.lastT = 0;
   t.stallSince = Date.now();
   let url;
@@ -247,7 +276,7 @@ async function startTile(ch, start) {
       speed: S.mode === 'playback' ? S.pbSpeed : 1,
     });
   } catch (e) {
-    t.state.textContent = errMsg(e);
+    setLoading(t, true, errMsg(e));
     return;
   }
   if (gen !== t.gen) return;
@@ -265,13 +294,13 @@ async function startTile(ch, start) {
   t.player = player;
   player.on(mpegts.Events.ERROR, () => {
     if (gen !== t.gen) return;
-    t.state.textContent = 'Sem sinal, tentando de novo…';
+    setLoading(t, true, 'Sem sinal, tentando de novo…');
     setTimeout(() => { if (gen === t.gen) restartTile(ch); }, 4000);
   });
   player.attachMediaElement(t.video);
   player.load();
   t.video.play().catch(() => {});
-  t.video.onplaying = () => { if (gen === t.gen) t.state.textContent = ''; };
+  t.video.onplaying = () => { if (gen === t.gen) setLoading(t, false); };
 }
 
 function restartTile(ch) {
@@ -306,7 +335,7 @@ setInterval(() => {
     if (ct !== t.lastT) { t.lastT = ct; t.stallSince = Date.now(); continue; }
     if (Date.now() - t.stallSince > 15000) {
       t.stallSince = Date.now();
-      t.state.textContent = 'Reconectando…';
+      setLoading(t, true, 'Reconectando…');
       restartTile(ch);
       if (S.mode === 'playback') return;
     }
@@ -354,14 +383,9 @@ function togglePause() {
     S.paused = true;
     // Guarda o último quadro como imagem e encerra a conexão com o DVR.
     for (const t of S.tiles.values()) {
-      if (t.player && t.video.videoWidth) {
-        const c = document.createElement('canvas');
-        c.width = t.video.videoWidth;
-        c.height = t.video.videoHeight;
-        c.getContext('2d').drawImage(t.video, 0, 0);
-        t.video.poster = c.toDataURL('image/jpeg', 0.85);
-      }
+      keepFrame(t);
       stopTile(t);
+      setLoading(t, false);
     }
   }
   updateModeUi();
@@ -733,7 +757,12 @@ async function init() {
   S.channels = info.channels;
   S.clockOffset = info.now - Date.now() / 1000;
   S.day = dayOf(info.now);
-  await loadDayAllChannels(S.day);
+  $('day').value = fmtBrDay(S.day);
+  timeline.setDay(S.day);
+  // Monta a grade já, com as câmeras que gravavam da última vez, e liga o ao vivo.
+  // A busca de gravações (lenta no DVR, até ~15 s) vem depois, em segundo plano.
+  S.hadRec = new Set(pref.get('hadRec', []));
+  S.recs = {};
   S.shown = computeShown();
   S.single = null;
   buildGrid();
@@ -741,7 +770,14 @@ async function init() {
   syncCutCams();
   showOutDir();
   goLive();
-  refreshStorage();
+  setTimeout(async () => {
+    await loadDayAllChannels(S.day);
+    pref.set('hadRec', [...S.hadRec]);
+    const shown = computeShown();
+    if (shown.join() !== S.shown.join()) applyShown(shown, false);
+    else { drawRows(); syncCutCams(); }
+    refreshStorage();
+  }, 1500);
   const last = pref.get('lastCut', null);
   if (!$('cutStart').value) {
     if (last && last.b > last.a) setCut(last.a, last.b);
@@ -759,8 +795,6 @@ async function loadDayAllChannels(day) {
   S.recs = {};
   for (const ch of chs) S.recs[ch] = (recs[ch] || []).filter((s) => s.end > day);
   S.hadRec = new Set(chs.filter((ch) => (recs[ch] || []).length));
-  $('day').value = fmtBrDay(day);
-  timeline.setDay(day);
 }
 
 // ---------- eventos ----------

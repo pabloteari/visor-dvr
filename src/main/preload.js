@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('dvr', {
   recordings: (q) => ipcRenderer.invoke('dvr:recordings', q),
   storage: (q) => ipcRenderer.invoke('dvr:storage', q),
   thumb: (q) => ipcRenderer.invoke('media:thumb', q),
+  liveFrame: (q) => ipcRenderer.invoke('media:liveFrame', q),
   snapshot: (q) => ipcRenderer.invoke('media:snapshot', q),
   openStream: (o) => ipcRenderer.invoke('stream:open', o),
   chooseDir: () => ipcRenderer.invoke('export:chooseDir'),

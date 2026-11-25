@@ -46,6 +46,8 @@ app.whenReady().then(async () => {
     await shot(win, '01-ao-vivo.png');
 
     // 2. HD
+    // A informação do HD chega depois da busca de gravações (em segundo plano, até ~20 s).
+    await waitFor(`/guarda/.test(document.getElementById('hdInfo').textContent)`, 40000);
     const hd = await js(`document.getElementById('hdInfo').textContent`);
     check('informação do HD', /HD .*guarda/.test(hd), hd);
 
@@ -80,7 +82,9 @@ app.whenReady().then(async () => {
       await js(`__visor.seek(${starts[0] - 120})`);
       await sleep(5000);
       await js(`__visor.jumpEvent(1)`);
-      await sleep(6000);
+      const tj = Date.now();
+      await waitFor(`[...__visor.S.tiles.values()].every(t => t.video.readyState >= 2)`, 15000);
+      log(`pulo de movimento: 4 câmeras com vídeo em ${((Date.now() - tj) / 1000).toFixed(1)}s`);
       s = await state();
       check('pular para o próximo movimento', Math.abs(s.pbStart - (starts[0] - 3)) <= 1 && s.tiles.every((t) => t.ready >= 2),
         `foi para ${new Date(s.pbStart * 1000).toISOString().slice(11, 19)} ${JSON.stringify(s.tiles)}`);

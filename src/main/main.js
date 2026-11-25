@@ -179,6 +179,12 @@ function registerIpc() {
     return thumbnail({ client: getClient(), channel, t: Math.floor(t) });
   });
 
+  ipcMain.handle('media:liveFrame', async (_e, { channel }) => {
+    checkChannel(channel);
+    const jpg = await getClient().snapshotJpeg(channel);
+    return jpg.length > 1000 ? `data:image/jpeg;base64,${jpg.toString('base64')}` : null;
+  });
+
   ipcMain.handle('media:snapshot', (_e, { channel, name, t }) => {
     checkChannel(channel);
     if (t != null && !isTime(t)) throw new Error('horário inválido');
